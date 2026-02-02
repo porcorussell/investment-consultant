@@ -78,7 +78,7 @@ def get_speculative_report():
             hist_30d = t.history(period="1mo")
             if len(hist_30d) >= 20:
                 monthly_change = ((hist_30d['Close'].iloc[-1] - hist_30d['Close'].iloc[0]) / hist_30d['Close'].iloc[0]) * 100
-                if monthly_change > 20: # Dramatic increase > 20% in 30 days
+                if monthly_change > 100: # Dramatic increase > 100% in 30 days
                     monthly_runners.append({
                         "ticker": ticker,
                         "change": monthly_change,
