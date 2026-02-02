@@ -76,8 +76,28 @@ def get_market_summary():
 
 def notify(text):
     print(text)
-    if GATEWAY_TOKEN:
-        requests.post(GATEWAY_URL, json={"message": text, "to": f"telegram:{TARGET_CHAT_ID}"}, headers={"Authorization": f"Bearer {GATEWAY_TOKEN}"})
+    if not GATEWAY_TOKEN:
+        print("Error: CLAWDBOT_GATEWAY_TOKEN not set.")
+        return
+
+    import subprocess
+    
+    cmd = [
+        "clawdbot", "message", "send",
+        "--channel", "telegram",
+        "--target", TARGET_CHAT_ID,
+        "--message", text,
+        "--json"
+    ]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"Notification result: Success")
+        else:
+            print(f"Notification error (CLI): {result.stderr.strip()}")
+    except Exception as e:
+        print(f"Notification error: {e}")
 
 if __name__ == '__main__':
     content = get_market_summary()

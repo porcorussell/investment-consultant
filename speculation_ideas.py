@@ -44,7 +44,7 @@ def get_reddit_momentum_agent():
     return spec_ideas
 
 def get_speculative_report():
-    """Aggregates momentum-first speculative ideas."""
+    """Aggregates momentum-first speculative ideas with detailed execution."""
     # 1. Social Momentum
     momentum_ideas = get_reddit_momentum_agent()
     
@@ -61,46 +61,111 @@ def get_speculative_report():
                     volatility_ideas.append({
                         "ticker": ticker,
                         "vol": daily_vol,
-                        "price": hist['Close'].iloc[-1]
+                        "price": hist['Close'].iloc[-1],
+                        "high": hist['High'].iloc[-1],
+                        "low": hist['Low'].iloc[-1]
                     })
         except: continue
     
     volatility_ideas.sort(key=lambda x: x['vol'], reverse=True)
 
-    report = "🔥 **Daily Speculation Ideas (10:30 AM)**\n\n⚡ **MOMENTUM TRADE SUGGESTIONS:**\n\n"
+    # 3. Monthly Runners (Potential Shorts/Puts)
+    monthly_runners = []
+    for ticker in watchlist:
+        try:
+            t = yf.Ticker(ticker)
+            # Fetch 1 month of history
+            hist_30d = t.history(period="1mo")
+            if len(hist_30d) >= 20:
+                monthly_change = ((hist_30d['Close'].iloc[-1] - hist_30d['Close'].iloc[0]) / hist_30d['Close'].iloc[0]) * 100
+                if monthly_change > 20: # Dramatic increase > 20% in 30 days
+                    monthly_runners.append({
+                        "ticker": ticker,
+                        "change": monthly_change,
+                        "price": hist_30d['Close'].iloc[-1]
+                    })
+        except: continue
+    
+    monthly_runners.sort(key=lambda x: x['change'], reverse=True)
+
+    report = "🔥 **Daily Speculation Ideas (10:30 AM)**\n\n⚡ **DETAILED TRADE EXECUTION PLANS:**\n\n"
     
     added_tickers = set()
+
+    # Add top Monthly Runners for Short/Puts
+    for idea in monthly_runners:
+        if idea['ticker'] not in added_tickers:
+            ticker = idea['ticker']
+            price = idea['price']
+            report += (f"🎯 **Trade Idea: {ticker} (Short / Puts)**\n"
+                       f"   • **Execution:** Long Puts or Bear Call Spread\n"
+                       f"   • **Contract:** Monthly expiry, OTM Puts (approx 5% below spot)\n"
+                       f"   • **Entry:** Entry on signs of technical exhaustion (e.g., lower high on 1H chart).\n"
+                       f"   • **Exit:** 30% profit target or 20% stop-loss on premium.\n"
+                       f"   _Analysis:_ Dramatic 30-day run of +{idea['change']:.1f}%. Monitoring for profit-taking pullback.\n\n")
+            added_tickers.add(ticker)
+        if len(added_tickers) >= 2: break
     
-    # Add top 3 Social Momentum
+    # Add top 3 Social Momentum with execution
     for idea in momentum_ideas:
         if idea['ticker'] not in added_tickers:
-            report += (f"🎯 **Trade Idea: {idea['ticker']} ({idea['type']})**\n"
-                       f"   _Analysis:_ High-velocity chatter in {idea['source']}: \"{idea['title']}\"\n"
+            ticker = idea['ticker']
+            price = yf.Ticker(ticker).history(period="1d")['Close'].iloc[-1]
+            report += (f"🎯 **Trade Idea: {ticker} ({idea['type']})**\n"
+                       f"   • **Execution:** Option (Bull Call Spread)\n"
+                       f"   • **Contract:** Next nearest expiry, strikes at ${price:.0f}/${price*1.05:.0f}\n"
+                       f"   • **Entry:** Limit order at mid-price; watch for volume spike confirmation.\n"
+                       f"   • **Exit:** 25% profit target or 15% stop-loss on premium.\n"
+                       f"   _Analysis:_ Trending in {idea['source']}: \"{idea['title']}\"\n"
                        f"   🔗 [Source]({idea['link']})\n\n")
-            added_tickers.add(idea['ticker'])
+            added_tickers.add(ticker)
         if len(added_tickers) >= 3: break
             
-    # Add top 2 Volatility Momentum
+    # Add top 2 Volatility Momentum with execution
     for idea in volatility_ideas:
         if idea['ticker'] not in added_tickers:
-            report += (f"🎯 **Trade Idea: {idea['ticker']} (Volatility/Price Action)**\n"
-                       f"   _Analysis:_ Intraday volatility of {idea['vol']:.1f}% detected. Entry near ${idea['price']:.2f} for scalp.\n\n")
-            added_tickers.add(idea['ticker'])
+            ticker = idea['ticker']
+            price = idea['price']
+            report += (f"🎯 **Trade Idea: {ticker} (Intraday Scalp)**\n"
+                       f"   • **Execution:** Stock (Long) or ATM Calls\n"
+                       f"   • **Entry:** Entry near support at ${idea['low']:.2f}; confirm with RSI < 30 on 5m chart.\n"
+                       f"   • **Exit:** Exit target at 1.5% stock gain (${price*1.015:.2f}) or trailing stop at day-low.\n"
+                       f"   _Analysis:_ High intraday volatility ({idea['vol']:.1f}%) detected. Momentum play on mean reversion.\n\n")
+            added_tickers.add(ticker)
         if len(added_tickers) >= 5: break
 
     report += (
         "📅 **UPCOMING EARNINGS (NEXT 48H):**\n"
         "• **SNAP** (High IV expected)\n"
         "• **PINS** (Social media sentiment proxy)\n\n"
-        "⚠️ *Disclaimer: High risk momentum plays. Tight stops required.*"
+        "⚠️ *Disclaimer: High risk speculative plays. Trade with discipline.*"
     )
     return report
 
 def notify(text):
-    if GATEWAY_TOKEN:
-        payload = {"message": text, "to": f"telegram:{TARGET_CHAT_ID}"}
-        resp = requests.post(GATEWAY_URL, json=payload, headers={"Authorization": f"Bearer {GATEWAY_TOKEN}"})
-        print(f"Notification result: {resp.status_code}")
+    print(text)
+    if not GATEWAY_TOKEN:
+        print("Error: CLAWDBOT_GATEWAY_TOKEN not set.")
+        return
+
+    import subprocess
+    
+    cmd = [
+        "clawdbot", "message", "send",
+        "--channel", "telegram",
+        "--target", TARGET_CHAT_ID,
+        "--message", text,
+        "--json"
+    ]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"Notification result: Success")
+        else:
+            print(f"Notification error (CLI): {result.stderr.strip()}")
+    except Exception as e:
+        print(f"Notification error: {e}")
 
 if __name__ == '__main__':
     content = get_speculative_report()
