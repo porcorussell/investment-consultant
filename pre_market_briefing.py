@@ -77,21 +77,60 @@ def get_fx_trends():
         
     return fx_usd, fx_cad, fx_sgd
 
-def get_briefing():
-    fx_usd, fx_cad, fx_sgd = get_fx_trends()
+def get_dynamic_trade_ideas():
+    """Fetch dynamic stock and ETF ideas based on pre-market activity and volume"""
+    stock_idea = "**NVDA**: Data unavailable"
+    etf_idea = "**SPY**: Data unavailable"
     
     try:
-        stock_ticker = "NVDA"
-        stock_price = yf.Ticker(stock_ticker).history(period="1d")['Close'].iloc[-1]
-        stock_idea = f"**{stock_ticker}** (Stock - Long): AI infrastructure demand remains the primary driver. Entry near ${stock_price:.2f}."
+        # 1. Dynamic Stock Selection (Trending/Active)
+        # We look at a basket of active stocks and pick one with news/movement
+        watchlist = ["TSLA", "NVDA", "AAPL", "AMZN", "MSFT", "AMD", "META", "GOOGL", "NFLX"]
+        active_stock = "NVDA" # default
+        max_chg = 0
         
-        etf_ticker = "SPY"
-        etf_price = yf.Ticker(etf_ticker).history(period="1d")['Close'].iloc[-1]
-        etf_idea = f"**{etf_ticker}** (ETF - Neutral/Long): Market eyes 6,000 level; watch for S&P 500 support at ${etf_price:.2f}."
-    except:
-        stock_idea = "**NVDA**: Data unavailable"
-        etf_idea = "**SPY**: Data unavailable"
+        for ticker in watchlist:
+            t = yf.Ticker(ticker)
+            hist = t.history(period="2d")
+            if len(hist) >= 2:
+                chg = abs(((hist['Close'].iloc[-1] - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100)
+                if chg > max_chg:
+                    max_chg = chg
+                    active_stock = ticker
+        
+        t_stock = yf.Ticker(active_stock)
+        price = t_stock.history(period="1d")['Close'].iloc[-1]
+        reason = get_live_narrative(active_stock, active_stock)
+        stock_idea = f"**{active_stock}** (Stock): Trading at ${price:.2f}. {reason}"
 
+        # 2. Dynamic ETF Selection (Macro focus)
+        etfs = ["SPY", "QQQ", "IWM", "TLT", "GLD", "VIXY"]
+        active_etf = "SPY"
+        max_etf_chg = 0
+        
+        for etf in etfs:
+            e = yf.Ticker(etf)
+            e_hist = e.history(period="2d")
+            if len(e_hist) >= 2:
+                e_chg = abs(((e_hist['Close'].iloc[-1] - e_hist['Close'].iloc[-2]) / e_hist['Close'].iloc[-2]) * 100)
+                if e_chg > max_etf_chg:
+                    max_etf_chg = e_chg
+                    active_etf = etf
+        
+        t_etf = yf.Ticker(active_etf)
+        e_price = t_etf.history(period="1d")['Close'].iloc[-1]
+        e_reason = get_live_narrative(active_etf, active_etf)
+        etf_idea = f"**{active_etf}** (ETF): Current level ${e_price:.2f}. {e_reason}"
+
+    except Exception as e:
+        print(f"Trade Idea Error: {e}")
+        
+    return stock_idea, etf_idea
+
+def get_briefing():
+    fx_usd, fx_cad, fx_sgd = get_fx_trends()
+    stock_idea, etf_idea = get_dynamic_trade_ideas()
+    
     briefing = (
         "📊 **Daily Pre-Market Briefing**\n\n"
         "📅 **Major Announcements:**\n"
